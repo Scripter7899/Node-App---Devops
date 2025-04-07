@@ -2,11 +2,11 @@ trigger:
   - main
 
 variables:
-  resourceGroup: 'rg-devops-cli'
+  resourceGroup: 'rg-devops-cli'  # Ensure this resource group exists
   location: 'East US'
-  appServicePlan: 'ASP-DevopsRG-87c7'
+  appServicePlan: 'ASP-DevopsRG-87c7'  # Ensure this App Service Plan exists
   webAppName: 'webapp-cli-demo-$(Build.BuildId)'
-  runtime: 'NODE:18-lts'
+  runtime: 'NODE:18-lts'  # Ensure this runtime is valid and available
 
 pool:
   vmImage: 'ubuntu-latest'
@@ -20,41 +20,30 @@ stages:
     steps:
 
     - task: AzureCLI@2
-      displayName: '🔧 Ensure Resource Group and Create Web App'
+      displayName: 'Create Web App'
       inputs:
         azureSubscription: 'Con1'
         scriptType: 'bash'
         scriptLocation: 'inlineScript'
         inlineScript: |
-          echo "🔍 Checking if resource group '${{ variables.resourceGroup }}' exists..."
-          if ! az group show --name "${{ variables.resourceGroup }}" &> /dev/null; then
-            echo "📦 Creating resource group..."
-            az group create --name "${{ variables.resourceGroup }}" --location "${{ variables.location }}"
-          else
-            echo "✅ Resource group exists."
-          fi
-
-          echo "🔍 Validating runtime '${{ variables.runtime }}'..."
-          RUNTIMES=$(az webapp list-runtimes --os-type Linux --query "[].name" -o tsv)
-          if echo "$RUNTIMES" | grep -Fxq "${{ variables.runtime }}"; then
-            echo "✅ Runtime is supported."
-          else
-            echo "❌ Runtime '${{ variables.runtime }}' is not supported. Exiting."
+          # Ensure the resource group exists
+          if ! az group show --name ${{ variables.resourceGroup }} &>/dev/null; then
+            echo "❌ Resource group '${{ variables.resourceGroup }}' does not exist. Exiting."
             exit 1
           fi
 
+          # Create the Web App
           echo "🚀 Creating Web App: ${{ variables.webAppName }}"
           az webapp create \
-            --resource-group "${{ variables.resourceGroup }}" \
-            --plan "${{ variables.appServicePlan }}" \
-            --name "${{ variables.webAppName }}" \
-            --runtime "${{ variables.runtime }}" \
-            --deployment-local-git
+            --resource-group ${{ variables.resourceGroup }} \
+            --plan ${{ variables.appServicePlan }} \
+            --name ${{ variables.webAppName }} \
+            --runtime "${{ variables.runtime }}"
 
     - task: NodeTool@0
       inputs:
-        versionSpec: '14.x'
-      displayName: '📦 Use Node.js 14.x'
+        versionSpec: '18.x'
+      displayName: 'Use Node.js 18.x'
 
     - script: |
         cd src
@@ -79,10 +68,11 @@ stages:
         package: '$(Build.ArtifactStagingDirectory)/app.zip'
 
     - script: |
-        echo "🔍 Smoke Testing Web App: $(webAppName)"
-        appUrl="https://$(webAppName).azurewebsites.net"
+        echo "🔍 Running post-deployment smoke tests..."
+        appUrl="https://${{ variables.webAppName }}.azurewebsites.net"
 
-        echo "🧪 Test 1: Checking HTTP 200..."
+        # Test 1: Check HTTP 200 response
+        echo "Test 1: Checking HTTP 200 response..."
         status_code=$(curl -s -o /dev/null -w "%{http_code}" $appUrl)
         if [ "$status_code" -ne 200 ]; then
           echo "❌ Test 1 Failed: Web App is not reachable (Status Code: $status_code)"
@@ -91,7 +81,8 @@ stages:
           echo "✅ Test 1 Passed"
         fi
 
-        echo "🧪 Test 2: Checking response time..."
+        # Test 2: Check response time
+        echo "Test 2: Checking response time..."
         response_time=$(curl -o /dev/null -s -w "%{time_total}\n" $appUrl)
         if (( $(echo "$response_time > 5.0" | bc -l) )); then
           echo "❌ Test 2 Failed: Response took too long ($response_time seconds)"
@@ -100,7 +91,8 @@ stages:
           echo "✅ Test 2 Passed"
         fi
 
-        echo "🧪 Test 3: Checking if content is correct..."
+        # Test 3: Check for specific content
+        echo "Test 3: Checking for specific content..."
         content=$(curl -s $appUrl)
         if [[ "$content" == *"Hello from Azure DevOps"* ]]; then
           echo "✅ Test 3 Passed: Content verified"
@@ -108,4 +100,4 @@ stages:
           echo "❌ Test 3 Failed: Unexpected content"
           exit 1
         fi
-      displayName: '✅ Post-Deploy Smoke Tests'
+      displayName: '✅ Post-Deployment Smoke Tests'
