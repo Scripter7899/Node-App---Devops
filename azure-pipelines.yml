@@ -6,7 +6,7 @@ variables:
   location: 'East US'
   appServicePlan: 'ASP-DevopsRG-87c7'
   webAppName: 'webapp-cli-demo-$(Build.BuildId)'
-  runtime: 'Node 18 LTS'
+  runtime: 'Node 18-lts'
 
 pool:
   vmImage: 'ubuntu-latest'
